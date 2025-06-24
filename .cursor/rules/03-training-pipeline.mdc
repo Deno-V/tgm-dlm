@@ -1,0 +1,94 @@
+---
+description: 
+globs: 训练流程：TGM-DLM的两阶段训练过程
+alwaysApply: false
+---
+# 训练流程：TGM-DLM的两阶段训练过程
+
+TGM-DLM的训练过程分为两个独立的阶段，对应两个不同的模型：文本引导生成模型和结构修正模型。本规则详细介绍完整的训练流程。
+
+## 数据准备
+
+在开始训练之前，需要处理和编码文本输入：
+
+1. 在[improved-diffusion/scripts/](mdc:improved-diffusion/scripts)目录下运行：
+   ```
+   python process_text.py -i train_val_256
+   python process_text.py -i test
+   ```
+
+2. 这一步将文本描述编码为模型可用的格式，编码的文本数据将在训练过程中被加载。
+
+## 数据处理和Tokenization
+
+数据处理和tokenization是训练的重要前置步骤：
+
+- **SMILES Tokenization**：每个分子被表示为其SMILES字符串的标记序列，采用特殊的分词方法而非简单的字符级分词。
+  - 实现在[mytokenizers.py](mdc:improved-diffusion/scripts/mytokenizers.py)中的`regexTokenizer`类
+  - 词汇表包含额外的特殊标记，如`[SOS]`、`[EOS]`、`[PAD]`等
+  - 所有序列都被填充到最大长度n=256
+
+- **数据加载**：
+  - 数据集实现在[mydatasets.py](mdc:improved-diffusion/scripts/mydatasets.py)中的`ChEBIdataset`类
+  - 数据存储在[datasets/SMILES/](mdc:datasets/SMILES)目录中
+
+## 第一阶段：文本引导生成模型训练
+
+第一阶段训练使用`train.py`脚本，训练文本引导的生成模型：
+
+1. 运行命令：`python train.py`
+
+2. 关键训练参数：
+   - 批次大小：64
+   - 学习率：5e-5
+   - 训练步数：200,000步（注意：通常需要超过100,000步才能获得良好结果）
+   - 检查点保存间隔：10,000步
+
+3. 训练细节：
+   - 使用Transformer架构（12层，隐藏维度1024，16个注意力头）
+   - 扩散步骤：总共2000步
+   - 文本条件通过冻结的SciBERT编码器导入
+
+4. 模型检查点保存在[checkpoints/](mdc:checkpoints)目录中
+
+5. 重要提示：
+   - 性能在损失收敛很久后才达到最佳
+   - 损失最终应收敛至约0.015左右
+   - 如果损失卡在较高值（如0.08），建议使用不同的随机种子重新训练
+
+## 第二阶段：结构修正模型训练
+
+第二阶段训练使用`train_correct_withmask.py`脚本，训练专注于修正SMILES结构的模型：
+
+1. 运行命令：`python train_correct_withmask.py`
+
+2. 关键训练参数：
+   - 与第一阶段类似，但使用不同的随机种子
+   - 额外参数：`corrupt_prob=0.4`（用于模拟结构错误）
+
+3. 训练细节：
+   - 使用与第一阶段相同的Transformer架构，但增加了掩码机制
+   - 训练目标：从被破坏的SMILES结构中恢复正确的分子表示
+   - 在模型定义中设置`mask=True`参数
+
+4. 模型检查点保存在[correction_checkpoints/](mdc:correction_checkpoints)目录中
+
+## 训练实现细节
+
+核心训练逻辑在以下文件中实现：
+
+- [train_util.py](mdc:improved-diffusion/improved_diffusion/train_util.py)：包含`TrainLoop`类，负责实际的训练循环
+- [resample.py](mdc:improved-diffusion/improved_diffusion/resample.py)：实现时间步采样策略
+- [fp16_util.py](mdc:improved-diffusion/improved_diffusion/fp16_util.py)：半精度训练支持
+
+训练监控：
+- 训练过程使用wandb进行实验跟踪和可视化
+- 损失曲线和样本质量可通过wandb仪表板监控
+
+## 分布式训练
+
+TGM-DLM支持分布式训练，通过以下机制实现：
+
+- 使用PyTorch的分布式训练功能
+- 实现文件：[dist_util.py](mdc:improved-diffusion/improved_diffusion/dist_util.py)
+- 通过`torch.distributed`模块实现数据并行

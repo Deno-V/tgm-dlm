@@ -1,0 +1,89 @@
+---
+description: 
+globs: 据处理与SMILES表示：TGM-DLM的分子数据处理
+alwaysApply: false
+---
+# 数据处理与SMILES表示：TGM-DLM的分子数据处理
+
+本规则详细介绍TGM-DLM如何处理分子数据，特别是SMILES表示和文本描述的处理。
+
+## SMILES表示概述
+
+SMILES（Simplified Molecular Input Line Entry System）是一种将分子结构表示为ASCII字符串的标准：
+
+- 每个SMILES字符串代表一个特定的分子结构
+- 例如：`C(C(=O)O)[NH3+]`表示氨基乙酸（甘氨酸）的某种质子化形式
+- SMILES使用特定规则表示原子、键、环、分支等结构元素
+
+## SMILES分词方法
+
+TGM-DLM使用特殊的分词方法处理SMILES字符串，而非简单的字符级分词：
+
+1. **分词实现**：
+   - 主要在[mytokenizers.py](mdc:improved-diffusion/scripts/mytokenizers.py)中实现
+   - 使用`regexTokenizer`类处理SMILES字符串
+
+2. **分词策略**：
+   - 将每个原子和原子团作为统一标记处理
+   - 词汇表包含键、环数字、括号和特殊情况（如`[SOS]`、`[EOS]`、`[PAD]`）
+   - 例如，`C(C(=O)O)[NH3+]`被分词为`[[SOS], C, (, C, (=, O,), O,), [NH3+], [EOS], ...]`
+   - 所有序列都被填充到最大长度n=256
+
+3. **特殊标记**：
+   - `[SOS]`：序列开始
+   - `[EOS]`：序列结束
+   - `[PAD]`：填充标记
+   - `[MASK]`：用于掩码训练（主要在第二阶段使用）
+
+## 数据集结构与加载
+
+TGM-DLM使用ChEBI-20数据集，其处理和加载方式如下：
+
+1. **数据集实现**：
+   - 主要在[mydatasets.py](mdc:improved-diffusion/scripts/mydatasets.py)中实现
+   - 使用`ChEBIdataset`类加载和处理数据
+
+2. **数据存储**：
+   - 数据文件存储在[datasets/SMILES/](mdc:datasets/SMILES)目录
+   - 包含训练集、验证集和测试集
+
+3. **数据加载过程**：
+   - 读取SMILES字符串和对应的文本描述
+   - 使用`regexTokenizer`对SMILES进行分词
+   - 对于第二阶段训练，使用`corrupt_prob`参数控制SMILES破坏概率
+
+4. **数据批处理**：
+   - 使用`get_dataloader`函数创建PyTorch数据加载器
+   - 支持分布式训练中的数据并行
+
+## 文本描述处理
+
+文本描述的处理流程：
+
+1. **文本预处理**：
+   - 使用[process_text.py](mdc:improved-diffusion/scripts/process_text.py)处理原始文本描述
+   - 标准化文本格式，确保一致性
+
+2. **文本编码**：
+   - 使用预训练的SciBERT模型将文本映射到潜在嵌入空间
+   - SciBERT是经过科学文献训练的BERT变体，适合处理化学相关文本
+   - 模型保持冻结状态，不进行微调
+
+3. **文本嵌入整合**：
+   - 文本嵌入通过交叉注意力机制整合到Transformer网络中
+   - 查询(Q)来自SMILES标记隐藏状态，而键(K)和值(V)通过MLP从文本嵌入派生
+
+## 数据增强和破坏
+
+在第二阶段训练中，使用特殊的数据增强策略：
+
+1. **SMILES结构破坏**：
+   - 使用`Corrupt(M)`函数随机添加或删除括号和环数字
+   - 破坏概率通过`corrupt_prob`参数控制（默认为0.4）
+   - 目的是训练模型识别和修复结构错误
+
+2. **掩码机制**：
+   - 在第二阶段模型中设置`mask=True`
+   - 允许模型专注于可能存在错误的SMILES部分
+
+这种数据处理方法使TGM-DLM能够有效地学习分子结构与文本描述之间的关系，并在生成过程中保持结构有效性。

@@ -1,0 +1,6 @@
+Metadata-Version: 2.1
+Name: improved-diffusion
+Version: 0.0.0
+Requires-Dist: blobfile
+Requires-Dist: torch
+Requires-Dist: tqdm

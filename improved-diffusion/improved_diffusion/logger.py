@@ -14,7 +14,11 @@ import tempfile
 import warnings
 from collections import defaultdict
 from contextlib import contextmanager
-import wandb
+# 替换wandb导入
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except ImportError:
+    SummaryWriter = None
 
 DEBUG = 10
 INFO = 20
@@ -334,6 +338,8 @@ class Logger(object):
     DEFAULT = None  # A logger with no output files. (See right below class definition)
     # So that you can still log to the terminal without setting up any output files
     CURRENT = None  # Current logger being used by the free functions above
+    tb_writer = None  # TensorBoard SummaryWriter实例
+    global_step = 0  # 全局步数计数器
 
     def __init__(self, dir, output_formats, comm=None):
         self.name2val = defaultdict(float)  # values this iteration
@@ -366,8 +372,11 @@ class Logger(object):
             )
             if self.comm.rank != 0:
                 d["dummy"] = 1  # so we don't get a warning about empty dict
-        # LISA
-        wandb.log({**d})
+        # 使用tensorboard替代wandb
+        if SummaryWriter is not None and hasattr(Logger, 'tb_writer') and Logger.tb_writer is not None:
+            Logger.tb_writer.add_scalars('metrics', d, global_step=Logger.global_step if hasattr(Logger, 'global_step') else 0)
+            if hasattr(Logger, 'global_step'):
+                Logger.global_step += 1
         out = d.copy()  # Return the dict for unit testing purposes
         for fmt in self.output_formats:
             if isinstance(fmt, KVWriter):

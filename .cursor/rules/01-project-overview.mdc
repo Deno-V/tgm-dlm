@@ -1,0 +1,54 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# 项目概述：Text-Guided Molecule Generation with Diffusion Language Model
+
+本项目实现了AAAI 2024论文《[Text-Guided Molecule Generation with Diffusion Language Model](mdc:https:/arxiv.org/abs/2402.13040v1)》中提出的方法。
+
+## 项目目标
+
+TGM-DLM（Text-Guided Molecule Generation with Diffusion Language Model）旨在根据文本描述精确生成分子结构。这对药物发现等领域至关重要，可以大大加速符合特定性质需求的分子识别过程。
+
+## 核心创新点
+
+- 采用扩散语言模型（Diffusion Language Model）进行分子生成，而不是传统的自回归模型
+- 实现两阶段扩散生成过程：
+  1. **第一阶段（文本引导生成）**：在文本描述的引导下，从随机噪声优化分子嵌入
+  2. **第二阶段（修正阶段）**：修正第一阶段可能产生的无效SMILES字符串，确保生成有效的分子结构
+
+## 项目结构
+
+- **模型核心实现**：[improved-diffusion/improved_diffusion/](mdc:improved-diffusion/improved_diffusion) 目录
+  - 扩散过程：[gaussian_diffusion.py](mdc:improved-diffusion/improved_diffusion/gaussian_diffusion.py)
+  - Transformer模型：[transformer_model2.py](mdc:improved-diffusion/improved_diffusion/transformer_model2.py)
+
+- **训练和推理脚本**：[improved-diffusion/scripts/](mdc:improved-diffusion/scripts) 目录
+  - 第一阶段训练：[train.py](mdc:improved-diffusion/scripts/train.py)
+  - 第二阶段训练：[train_correct_withmask.py](mdc:improved-diffusion/scripts/train_correct_withmask.py)
+  - 分子生成：[text_sample.py](mdc:improved-diffusion/scripts/text_sample.py)和[post_sample.py](mdc:improved-diffusion/scripts/post_sample.py)
+
+- **数据处理**：
+  - 数据集：[datasets/SMILES/](mdc:datasets/SMILES)
+  - SMILES分词器：[mytokenizers.py](mdc:improved-diffusion/scripts/mytokenizers.py)
+  - 数据集加载：[mydatasets.py](mdc:improved-diffusion/scripts/mydatasets.py)
+
+- **评估**：
+  - 评估脚本：[ev.py](mdc:ev.py)
+
+- **预训练模型和检查点**：
+  - 文本编码器：[scibert/](mdc:scibert)和[bert-base-uncased/](mdc:bert-base-uncased)
+  - 模型检查点：[checkpoints/](mdc:checkpoints)和[correction_checkpoints/](mdc:correction_checkpoints)
+
+## 快速开始
+
+请参考[README.md](mdc:README.md)获取安装和使用说明。
+
+基本步骤：
+1. 安装依赖：`pip install -e improved-diffusion/; pip install -e transformers/`
+2. 训练模型：
+   - 第一阶段：`python train.py`
+   - 第二阶段：`python train_correct_withmask.py`
+3. 生成分子：`python text_sample.py; python post_sample.py`
+4. 评估结果：`python ev.py`

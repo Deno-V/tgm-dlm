@@ -1,0 +1,38 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "调试 process_text.py",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/improved-diffusion/scripts/process_text.py",
+            "args": ["-i", "train_val_256"],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}/improved-diffusion/scripts",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "stopOnEntry": false,
+            "showReturnValue": true,
+            "redirectOutput": true
+        },
+        {
+            "name": "调试 train.py",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/improved-diffusion/scripts/train.py",
+            "args": [],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}/improved-diffusion/scripts",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "CUDA_VISIBLE_DEVICES": "0"
+            },
+            "stopOnEntry": false,
+            "showReturnValue": true,
+            "redirectOutput": true
+        }
+    ]
+}

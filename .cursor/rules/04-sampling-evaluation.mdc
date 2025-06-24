@@ -1,0 +1,80 @@
+---
+description: 
+globs: 采样与评估：从TGM-DLM生成分子并评估其质量
+alwaysApply: false
+---
+# 采样与评估：从TGM-DLM生成分子并评估其质量
+
+本规则详细介绍如何使用训练好的TGM-DLM模型生成分子，以及如何评估生成分子的质量。
+
+## 分子生成（采样）过程
+
+TGM-DLM的分子生成是一个两阶段过程，分别使用两个脚本实现：
+
+### 第一阶段：文本引导的分子生成
+
+使用[text_sample.py](mdc:improved-diffusion/scripts/text_sample.py)脚本实现第一阶段采样：
+
+1. 命令：`python text_sample.py`
+
+2. 工作流程：
+   - 加载训练好的第一阶段模型（从[checkpoints/](mdc:checkpoints)目录）
+   - 从测试集中读取文本描述
+   - 使用200个扩散步骤（通过uniform skipping策略）从随机噪声生成初始分子表示
+   - 将生成的嵌入矩阵转换回SMILES字符串
+   - 输出带有可能无效结构的初始分子
+
+3. 关键参数：
+   - `model_path`：第一阶段模型检查点路径
+   - `batch_size`：批处理大小
+   - `num_samples`：为每个文本描述生成的样本数量
+
+### 第二阶段：分子结构修正
+
+使用[post_sample.py](mdc:improved-diffusion/scripts/post_sample.py)脚本实现第二阶段修正：
+
+1. 命令：`python post_sample.py`
+
+2. 工作流程：
+   - 加载第一阶段生成的分子
+   - 加载训练好的第二阶段模型（从[correction_checkpoints/](mdc:correction_checkpoints)目录）
+   - 使用20个扩散步骤修正分子结构
+   - 输出最终的有效分子SMILES字符串
+   - 生成最终输出文件`OURMODEL_OUTPUT.txt`或`tempoutput.txt`
+
+3. 关键参数：
+   - `model_path`：第二阶段模型检查点路径
+   - `timestep_respacing`：指定使用的扩散步骤数（通常为20）
+
+## 评估生成分子的质量
+
+使用[ev.py](mdc:ev.py)脚本评估生成分子的质量：
+
+1. 命令：`python ev.py`
+
+2. 评估指标：
+   - **BLEU分数**：测量生成的SMILES与参考SMILES的相似性
+   - **精确匹配分数**：完全匹配的分子比例
+   - **Levenshtein分数**：字符级编辑距离
+   - **分子指纹相似性**：
+     - MACCS指纹相似性
+     - RDK指纹相似性
+     - Morgan指纹相似性（半径为2）
+   - **FCD指标**：Fréchet ChemNet Distance，衡量生成分子与参考分子的分布差异
+   - **有效性分数**：生成的有效分子比例
+
+3. 评估流程：
+   - 从`tempoutput.txt`中读取生成的和参考的SMILES字符串
+   - 使用RDKit处理和比较分子
+   - 计算并打印各项评估指标
+
+4. Text2Mol评估：
+   - 对于Text2Mol评估，需要参考[MolT5仓库](mdc:https:/github.com/blender-nlp/MolT5)进行单独处理
+
+## 生成过程的实现细节
+
+生成过程的核心实现在以下文件中：
+
+- [gaussian_diffusion.py](mdc:improved-diffusion/improved_diffusion/gaussian_diffusion.py)：实现扩散采样过程
+- [respace.py](mdc:improved-diffusion/improved_diffusion/respace.py)：实现时间步骤的重新采样，特别是采样跳步策略
+- [rounding.py](mdc:improved-diffusion/improved_diffusion/rounding.py)：实现从嵌入到SMILES字符串的转换

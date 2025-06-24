@@ -179,7 +179,7 @@ def create_gaussian_diffusion(
     )
 
 
-def add_dict_to_argparser(parser, default_dict):
+def add_dict_to_argparser(parser, default_dict):  # 添加参数解析器。将参数字典中的键值对动态添加到 argparse.ArgumentParser 对象中，从而简化命令行参数的配置
     for k, v in default_dict.items():
         v_type = type(v)
         if v is None:

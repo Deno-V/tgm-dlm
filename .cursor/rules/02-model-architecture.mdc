@@ -1,0 +1,67 @@
+---
+description: 
+globs: 模型架构：TGM-DLM的两阶段扩散模型
+alwaysApply: false
+---
+# 模型架构：TGM-DLM的两阶段扩散模型
+
+TGM-DLM采用了创新的扩散语言模型架构，用于分子生成。本规则详细介绍其架构设计。
+
+## 扩散框架概述
+
+TGM-DLM基于扩散框架进行语言生成，包含四个主要过程：
+
+1. **嵌入过程**：将分词后的SMILES序列转换为嵌入矩阵，前向过程的起始矩阵从以此嵌入为中心的高斯分布中采样。
+   - 实现文件：[transformer_model2.py](mdc:improved-diffusion/improved_diffusion/transformer_model2.py)
+
+2. **前向过程**：在T个步骤中逐渐向嵌入矩阵添加噪声，最终得到纯高斯噪声。
+   - 实现文件：[gaussian_diffusion.py](mdc:improved-diffusion/improved_diffusion/gaussian_diffusion.py)
+
+3. **反向过程**：从纯噪声开始，逐步去噪以重建原始嵌入。
+   - 实现文件：[gaussian_diffusion.py](mdc:improved-diffusion/improved_diffusion/gaussian_diffusion.py)
+
+4. **舍入过程**：将去噪后的嵌入矩阵转换回SMILES字符串。
+   - 实现文件：[rounding.py](mdc:improved-diffusion/improved_diffusion/rounding.py)
+
+## 两阶段生成过程
+
+TGM-DLM的核心创新在于其两阶段反向（去噪）过程：
+
+### 第一阶段：文本引导生成
+
+- **目标**：在文本描述的引导下，从纯高斯噪声逐步精炼嵌入矩阵。
+- **机制**：使用基于Transformer的神经网络（`f_{1,θ}`）预测原始嵌入，考虑当前噪声嵌入、时间步和文本嵌入。
+- **文本集成**：
+  - 使用预训练的SciBERT将文本描述映射到潜在嵌入空间
+  - 通过交叉注意力机制将文本嵌入整合到Transformer网络中
+- **实现文件**：
+  - 训练脚本：[train.py](mdc:improved-diffusion/scripts/train.py)
+  - 模型结构：[transformer_model2.py](mdc:improved-diffusion/improved_diffusion/transformer_model2.py)
+  - 扩散过程：[gaussian_diffusion.py](mdc:improved-diffusion/improved_diffusion/gaussian_diffusion.py)
+
+### 第二阶段：修正阶段
+
+- **目标**：修正第一阶段可能产生的无效SMILES字符串（如未闭合的环、不匹配的括号、价态错误等）。
+- **机制**：使用与第一阶段相同架构的去噪网络（`f_{2,θ}`），但不使用文本引导，专注于结构修正。
+- **实现文件**：
+  - 训练脚本：[train_correct_withmask.py](mdc:improved-diffusion/scripts/train_correct_withmask.py)
+  - 扩散过程：[gaussian_diffusion.py](mdc:improved-diffusion/improved_diffusion/gaussian_diffusion.py)
+
+## 关键实现细节
+
+1. **词汇表**：257个SMILES标记，嵌入维度d=32
+2. **文本编码器**：冻结的SciBERT，嵌入维度d1=768
+3. **Transformer**：12层，隐藏维度d2=1024，总训练参数约180M
+4. **扩散步骤**：
+   - 训练：总共T=2000步；对于第二阶段目标，在t<400的步骤应用结构破坏
+   - 采样（生成）：第一阶段200步，第二阶段20步
+5. **训练**：为每个阶段训练独立的去噪模型，学习率1×10^-4，线性预热
+
+## 训练目标
+
+TGM-DLM有两个训练目标：
+
+1. **目标一**：训练`f_{1,θ}`在文本描述引导下从噪声版本恢复原始嵌入
+2. **目标二**：训练`f_{2,θ}`从故意破坏的SMILES字符串嵌入中恢复原始嵌入，主要目的是修正无效结构
+
+关键实现文件：[losses.py](mdc:improved-diffusion/improved_diffusion/losses.py)

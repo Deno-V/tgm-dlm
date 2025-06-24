@@ -8,6 +8,7 @@ import torch as th
 import torch.distributed as dist
 from torch.nn.parallel.distributed import DistributedDataParallel as DDP
 from torch.optim import AdamW
+from torch.utils.tensorboard import SummaryWriter
 
 from . import dist_util, logger
 from .fp16_util import (
@@ -49,6 +50,7 @@ class TrainLoop:
         gradient_clipping=-1.,
         eval_data=None,
         eval_interval=-1,
+        tb_writer=None,
     ):
         print("IN AUG trainutil")
         rank = dist.get_rank()
@@ -78,6 +80,7 @@ class TrainLoop:
         self.weight_decay = weight_decay
         self.lr_anneal_steps = lr_anneal_steps
         self.gradient_clipping = gradient_clipping
+        self.tb_writer = tb_writer
 
         self.step = 0
         self.resume_step = 0
@@ -288,7 +291,8 @@ class TrainLoop:
             # print('----DEBUG-----',self.step,self.log_interval)
             if self.step % self.log_interval == 0 and self.rank==0:
                 print("rank0: ",self.step,loss.item())
-                wandb.log({'loss':loss.item()})
+                if self.tb_writer is not None:
+                    self.tb_writer.add_scalar('loss', loss.item(), self.step)
             # log_loss_dict(
             #     self.diffusion, t, {k: v * weights for k, v in losses.items()}
             # )

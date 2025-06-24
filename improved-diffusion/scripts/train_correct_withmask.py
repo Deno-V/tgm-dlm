@@ -1,5 +1,5 @@
 """
-Train a diffusion model on images.
+Train a diffusion model on images. Phase Two
 """
 
 import argparse
@@ -23,7 +23,7 @@ from functools import partial
 from improved_diffusion.test_util import get_weights, compute_logp
 from improved_diffusion.rounding import load_models, load_tokenizer
 import torch.distributed as dist
-import wandb
+from torch.utils.tensorboard import SummaryWriter
 from mytokenizers import SimpleSmilesTokenizer,regexTokenizer
 from mydatasets import get_dataloader,ChEBIdataset
 import warnings
@@ -35,11 +35,20 @@ def main_worker(rank,world_size):
     set_seed(args.seed)
 
     if rank == 0:
-        wandb.init(
-            project = "DiffusionLMRegexAug",
-            config = args.__dict__,
-        )
-        print(wandb.config)
+        # 创建tensorboard日志目录
+        log_dir = os.path.join(args.checkpoint_path, 'tensorboard_logs')
+        os.makedirs(log_dir, exist_ok=True)
+        writer = SummaryWriter(log_dir=log_dir)
+        
+        # 记录配置参数
+        for key, value in args.__dict__.items():
+            writer.add_text('config', f'{key}: {value}')
+        
+        # 设置Logger的tensorboard writer
+        from improved_diffusion.logger import Logger
+        Logger.tb_writer = writer
+        
+        print("Tensorboard logs will be saved to:", log_dir)
 
 
     dist_util.setup_dist(rank,world_size,port='11323') 
@@ -119,8 +128,13 @@ def main_worker(rank,world_size):
         checkpoint_path=args.checkpoint_path,
         gradient_clipping=args.gradient_clipping,
         eval_data=data_valid,
-        eval_interval=args.eval_interval
+        eval_interval=args.eval_interval,
+        tb_writer=writer if rank == 0 else None,
     ).run_loop()
+    
+    if rank == 0:
+        writer.close()
+        
     dist.destroy_process_group()
 
 
